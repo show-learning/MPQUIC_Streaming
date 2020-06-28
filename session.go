@@ -1375,7 +1375,7 @@ func (s *session) sendPackets() error {
 				return err
 			}
 		case ackhandler.SendAny:
-			if s.handshakeComplete && !s.sentPacketHandler.HasPacingBudget() {
+			if s.handshakeComplete && !s.sentPacketHandler.HasPacingBudget() && sentPacket {
 				s.pacingDeadline = s.sentPacketHandler.TimeUntilSend()
 				return nil
 			}
