@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
@@ -11,6 +13,10 @@ import (
 const alpn = "benchmark"
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	tlsConf := testdata.GetTLSConfig()
 	tlsConf.NextProtos = []string{alpn}
 	ln, err := quic.ListenAddr("localhost:1234", tlsConf, nil)

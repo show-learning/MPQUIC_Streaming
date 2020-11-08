@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"sync/atomic"
 	"time"
 
@@ -13,6 +15,10 @@ import (
 const alpn = "benchmark"
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6061", nil))
+	}()
+
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{alpn},
