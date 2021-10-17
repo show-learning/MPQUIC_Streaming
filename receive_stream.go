@@ -173,6 +173,9 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 		bytesRead += m
 
 		s.mutex.Lock()
+		if s.canceledRead {
+			return false, 0, s.cancelReadErr
+		}
 		// when a RESET_STREAM was received, the was already informed about the final byteOffset for this stream
 		if !s.resetRemotely {
 			s.flowController.AddBytesRead(protocol.ByteCount(m))

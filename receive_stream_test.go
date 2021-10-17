@@ -4,7 +4,11 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"sync"
+	"testing"
 	"time"
+
+	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
@@ -15,6 +19,85 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 )
+
+type mockFC struct{}
+
+var _ flowcontrol.StreamFlowController = &mockFC{}
+
+func (m mockFC) SendWindowSize() protocol.ByteCount                                { return 0 }
+func (m mockFC) UpdateSendWindow(count protocol.ByteCount)                         {}
+func (m mockFC) AddBytesSent(count protocol.ByteCount)                             {}
+func (m mockFC) AddBytesRead(count protocol.ByteCount)                             {}
+func (m mockFC) GetWindowUpdate() protocol.ByteCount                               { return 0 }
+func (m mockFC) IsNewlyBlocked() (bool, protocol.ByteCount)                        { return false, 0 }
+func (m mockFC) UpdateHighestReceived(offset protocol.ByteCount, final bool) error { return nil }
+func (m mockFC) Abandon()                                                          {}
+
+type mockSender struct{}
+
+func (mockSender) queueControlFrame(frame wire.Frame)     {}
+func (mockSender) onHasStreamData(id protocol.StreamID)   {}
+func (mockSender) onStreamCompleted(id protocol.StreamID) {}
+
+func runBenchmark(b *testing.B, n, fragmentSize int) {
+	const streamID = 1337
+	str := newReceiveStream(streamID, &mockSender{}, &mockFC{}, protocol.VersionWhatever)
+	length := 512 * n
+	data := make([]byte, length)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		for j := 0; j < length; j += fragmentSize {
+			str.handleStreamFrame(&wire.StreamFrame{
+				StreamID: streamID,
+				Offset:   protocol.ByteCount(j),
+				Data:     data[j : j+fragmentSize],
+				Fin:      j+fragmentSize == length,
+			})
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		buf := make([]byte, 1024)
+		var total int
+		for total < length {
+			n, err := str.Read(buf)
+			total += n
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				b.Fatal(err)
+			}
+		}
+		if total != length {
+			b.Fatalf("expected to copy %d bytes, copied %d", n, length)
+		}
+	}()
+	wg.Wait()
+}
+
+func BenchmarkStreamRead128(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		runBenchmark(b, i, 128)
+	}
+}
+
+func BenchmarkStreamRead256(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		runBenchmark(b, i, 256)
+	}
+}
+
+func BenchmarkStreamRead512(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		runBenchmark(b, i, 512)
+	}
+}
 
 var _ = Describe("Receive Stream", func() {
 	const streamID protocol.StreamID = 1337
