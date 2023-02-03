@@ -1119,6 +1119,7 @@ func (s *connection) handleVersionNegotiationPacket(p *receivedPacket) {
 	}
 
 	src, dest, supportedVersions, err := wire.ParseVersionNegotiationPacket(p.data)
+	fmt.Printf("### received Version Negotiation Packet: %v ###\n", supportedVersions)
 	if err != nil {
 		if s.tracer != nil {
 			s.tracer.DroppedPacket(logging.PacketTypeVersionNegotiation, p.Size(), logging.PacketDropHeaderParseError)

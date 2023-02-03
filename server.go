@@ -670,6 +670,7 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 }
 
 func (s *baseServer) sendVersionNegotiationPacket(remote net.Addr, src, dest protocol.ArbitraryLenConnectionID, oob []byte) {
+	fmt.Printf("### sending Version Negotiation Packet ###")
 	s.logger.Debugf("Client offered version %s, sending Version Negotiation")
 
 	data := wire.ComposeVersionNegotiation(dest, src, s.config.Versions)
