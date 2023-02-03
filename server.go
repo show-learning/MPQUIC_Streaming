@@ -341,7 +341,7 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 			return false
 		}
 		if !s.config.DisableVersionNegotiationPackets {
-			go s.sendVersionNegotiationPacket(p.remoteAddr, src, dest, p.info.OOB())
+			go s.sendVersionNegotiationPacket(v, p.remoteAddr, src, dest, p.info.OOB())
 		}
 		return false
 	}
@@ -669,9 +669,9 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 	return err
 }
 
-func (s *baseServer) sendVersionNegotiationPacket(remote net.Addr, src, dest protocol.ArbitraryLenConnectionID, oob []byte) {
-	fmt.Printf("### sending Version Negotiation Packet ###")
-	s.logger.Debugf("Client offered version %s, sending Version Negotiation")
+func (s *baseServer) sendVersionNegotiationPacket(v protocol.VersionNumber, remote net.Addr, src, dest protocol.ArbitraryLenConnectionID, oob []byte) {
+	fmt.Printf("### sending Version Negotiation Packet for version %s ###\n", v)
+	s.logger.Debugf("Client offered version %s, sending Version Negotiation", v)
 
 	data := wire.ComposeVersionNegotiation(dest, src, s.config.Versions)
 	if s.config.Tracer != nil {
