@@ -406,7 +406,8 @@ func (t *Transport) maybeHandleStatelessReset(data []byte) bool {
 		return false
 	}
 
-	token := *(*protocol.StatelessResetToken)(data[len(data)-16:])
+	var token protocol.StatelessResetToken
+	copy(token[:], data[len(data)-16:])
 	if conn, ok := t.handlerMap.GetByResetToken(token); ok {
 		t.logger.Debugf("Received a stateless reset with token %#x. Closing connection.", token)
 		go conn.destroy(&StatelessResetError{Token: token})
