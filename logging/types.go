@@ -1,5 +1,7 @@
 package logging
 
+import "fmt"
+
 // PacketType is the packet type of a QUIC packet
 type PacketType uint8
 
@@ -21,6 +23,29 @@ const (
 	// PacketTypeNotDetermined is the packet type when it could not be determined
 	PacketTypeNotDetermined
 )
+
+func (p PacketType) String() string {
+	switch p {
+	case PacketTypeInitial:
+		return "Initial"
+	case PacketTypeHandshake:
+		return "Handshake"
+	case PacketTypeRetry:
+		return "Retry"
+	case PacketType0RTT:
+		return "0-RTT"
+	case PacketType1RTT:
+		return "1-RTT"
+	case PacketTypeVersionNegotiation:
+		return "Version Negotiation"
+	case PacketTypeStatelessReset:
+		return "Stateless Reset"
+	case PacketTypeNotDetermined:
+		return "not determined"
+	default:
+		return fmt.Sprintf("unknown packet type: %d", p)
+	}
+}
 
 type PacketLossReason uint8
 
