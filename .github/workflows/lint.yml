@@ -39,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [ "1.20.x", "1.21.x" ]
+        go: [ "1.21.x" ]
     name: golangci-lint (Go ${{ matrix.go }})
     steps:
       - uses: actions/checkout@v4
