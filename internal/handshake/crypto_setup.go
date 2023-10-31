@@ -214,11 +214,10 @@ func (h *cryptoSetup) StartHandshake() error {
 	}
 	for {
 		ev := h.conn.NextEvent()
-		done, err := h.handleEvent(ev)
-		if err != nil {
+		if err := h.handleEvent(ev); err != nil {
 			return wrapError(err)
 		}
-		if done {
+		if ev.Kind == qtls.QUICNoEvent {
 			break
 		}
 	}
@@ -254,42 +253,41 @@ func (h *cryptoSetup) handleMessage(data []byte, encLevel protocol.EncryptionLev
 	}
 	for {
 		ev := h.conn.NextEvent()
-		done, err := h.handleEvent(ev)
-		if err != nil {
+		if err := h.handleEvent(ev); err != nil {
 			return err
 		}
-		if done {
+		if ev.Kind == qtls.QUICNoEvent {
 			return nil
 		}
 	}
 }
 
-func (h *cryptoSetup) handleEvent(ev qtls.QUICEvent) (done bool, err error) {
+func (h *cryptoSetup) handleEvent(ev qtls.QUICEvent) (err error) {
 	switch ev.Kind {
 	case qtls.QUICNoEvent:
-		return true, nil
+		return nil
 	case qtls.QUICSetReadSecret:
 		h.SetReadKey(ev.Level, ev.Suite, ev.Data)
-		return false, nil
+		return nil
 	case qtls.QUICSetWriteSecret:
 		h.SetWriteKey(ev.Level, ev.Suite, ev.Data)
-		return false, nil
+		return nil
 	case qtls.QUICTransportParameters:
-		return false, h.handleTransportParameters(ev.Data)
+		return h.handleTransportParameters(ev.Data)
 	case qtls.QUICTransportParametersRequired:
 		h.conn.SetTransportParameters(h.ourParams.Marshal(h.perspective))
-		return false, nil
+		return nil
 	case qtls.QUICRejectedEarlyData:
 		h.rejected0RTT()
-		return false, nil
+		return nil
 	case qtls.QUICWriteData:
 		h.WriteRecord(ev.Level, ev.Data)
-		return false, nil
+		return nil
 	case qtls.QUICHandshakeDone:
 		h.handshakeComplete()
-		return false, nil
+		return nil
 	default:
-		return false, fmt.Errorf("unexpected event: %d", ev.Kind)
+		return fmt.Errorf("unexpected event: %d", ev.Kind)
 	}
 }
 
