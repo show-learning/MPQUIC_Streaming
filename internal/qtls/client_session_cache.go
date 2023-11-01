@@ -24,7 +24,7 @@ func (c clientSessionCache) Put(key string, cs *tls.ClientSessionState) {
 		c.wrapped.Put(key, cs)
 		return
 	}
-	state.Extra = append(state.Extra, addExtraPrefix(c.getData()))
+	state.Extra = append(state.Extra, AddSessionStateExtraPrefix(c.getData()))
 	newCS, err := tls.NewResumptionState(ticket, state)
 	if err != nil {
 		// It's not clear why this would error. Just save the original state.
@@ -48,7 +48,7 @@ func (c clientSessionCache) Get(key string) (*tls.ClientSessionState, bool) {
 	}
 	var earlyData bool
 	// restore QUIC transport parameters and RTT stored in state.Extra
-	if extra := findExtraData(state.Extra); extra != nil {
+	if extra := FindSessionStateExtraData(state.Extra); extra != nil {
 		earlyData = c.setData(extra)
 	}
 	state.EarlyData = earlyData

@@ -286,6 +286,26 @@ func (h *cryptoSetup) handleEvent(ev qtls.QUICEvent) (err error) {
 	case qtls.QUICHandshakeDone:
 		h.handshakeComplete()
 		return nil
+	case qtls.QUICStoreSession:
+		if h.perspective == protocol.PerspectiveServer {
+			panic("cryptoSetup BUG: unexpected QUICStoreSession event for the server")
+		}
+		ev.SessionState.Extra = append(ev.SessionState.Extra, qtls.AddSessionStateExtraPrefix(h.marshalDataForSessionState()))
+		return h.conn.StoreSession(ev.SessionState)
+	case qtls.QUICResumeSession:
+		var allowEarlyData bool
+		switch h.perspective {
+		case protocol.PerspectiveClient:
+			// for clients, this event occurs when a session ticket is selected
+			allowEarlyData = h.handleDataFromSessionState(qtls.FindSessionStateExtraData(ev.SessionState.Extra))
+		case protocol.PerspectiveServer:
+			// for servers, this event occurs when receiving the client's session ticket
+			allowEarlyData = h.handleSessionTicket(qtls.FindSessionStateExtraData(ev.SessionState.Extra), ev.SessionState.EarlyData)
+		}
+		if ev.SessionState.EarlyData {
+			ev.SessionState.EarlyData = allowEarlyData
+		}
+		return nil
 	default:
 		return fmt.Errorf("unexpected event: %d", ev.Kind)
 	}
@@ -369,7 +389,7 @@ func (h *cryptoSetup) getDataForSessionTicket() []byte {
 // Due to limitations in crypto/tls, it's only possible to generate a single session ticket per connection.
 // It is only valid for the server.
 func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
-	if err := qtls.SendSessionTicket(h.conn, h.allow0RTT); err != nil {
+	if err := qtls.SendSessionTicket(h.conn, h.allow0RTT, qtls.AddSessionStateExtraPrefix(h.getDataForSessionTicket())); err != nil {
 		// Session tickets might be disabled by tls.Config.SessionTicketsDisabled.
 		// We can't check h.tlsConfig here, since the actual config might have been obtained from
 		// the GetConfigForClient callback.
@@ -395,9 +415,9 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 // It reads parameters from the session ticket and checks whether to accept 0-RTT if the session ticket enabled 0-RTT.
 // Note that the fact that the session ticket allows 0-RTT doesn't mean that the actual TLS handshake enables 0-RTT:
 // A client may use a 0-RTT enabled session to resume a TLS session without using 0-RTT.
-func (h *cryptoSetup) handleSessionTicket(sessionTicketData []byte, using0RTT bool) bool {
+func (h *cryptoSetup) handleSessionTicket(data []byte, using0RTT bool) (allowEarlyData bool) {
 	var t sessionTicket
-	if err := t.Unmarshal(sessionTicketData, using0RTT); err != nil {
+	if err := t.Unmarshal(data, using0RTT); err != nil {
 		h.logger.Debugf("Unmarshalling session ticket failed: %s", err.Error())
 		return false
 	}

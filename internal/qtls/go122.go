@@ -1,4 +1,4 @@
-//go:build go1.21 && !go1.22
+//go:build go1.22
 
 package qtls
 
@@ -35,17 +35,16 @@ const (
 	QUICTransportParametersRequired = tls.QUICTransportParametersRequired
 	QUICRejectedEarlyData           = tls.QUICRejectedEarlyData
 	QUICHandshakeDone               = tls.QUICHandshakeDone
-	// QUICStoreSession is an event that can never occur in Go 1.21.
-	QUICStoreSession = -1
-	// QUICResumeSession is an event that can never occur in Go 1.21.
-	QUICResumeSession = -2
+	QUICResumeSession               = tls.QUICResumeSession
+	QUICStoreSession                = tls.QUICStoreSession
 )
 
 func QUICServer(config *QUICConfig) *QUICConn { return tls.QUICServer(config) }
 func QUICClient(config *QUICConfig) *QUICConn { return tls.QUICClient(config) }
 
-func SetupConfigForServer(qconf *QUICConfig, _ bool, getData func() []byte, handleSessionTicket func([]byte, bool) bool) {
+func SetupConfigForServer(qconf *QUICConfig, _ bool, _ func() []byte, _ func([]byte, bool) bool) {
 	conf := qconf.TLSConfig
+	qconf.EnableStoreSessionEvent = true
 
 	// Workaround for https://github.com/golang/go/issues/60506.
 	// This initializes the session tickets _before_ cloning the config.
@@ -54,58 +53,10 @@ func SetupConfigForServer(qconf *QUICConfig, _ bool, getData func() []byte, hand
 	conf = conf.Clone()
 	conf.MinVersion = tls.VersionTLS13
 	qconf.TLSConfig = conf
-
-	// add callbacks to save transport parameters into the session ticket
-	origWrapSession := conf.WrapSession
-	conf.WrapSession = func(cs tls.ConnectionState, state *tls.SessionState) ([]byte, error) {
-		// Add QUIC session ticket
-		state.Extra = append(state.Extra, AddSessionStateExtraPrefix(getData()))
-
-		if origWrapSession != nil {
-			return origWrapSession(cs, state)
-		}
-		b, err := conf.EncryptTicket(cs, state)
-		return b, err
-	}
-	origUnwrapSession := conf.UnwrapSession
-	// UnwrapSession might be called multiple times, as the client can use multiple session tickets.
-	// However, using 0-RTT is only possible with the first session ticket.
-	// crypto/tls guarantees that this callback is called in the same order as the session ticket in the ClientHello.
-	var unwrapCount int
-	conf.UnwrapSession = func(identity []byte, connState tls.ConnectionState) (*tls.SessionState, error) {
-		unwrapCount++
-		var state *tls.SessionState
-		var err error
-		if origUnwrapSession != nil {
-			state, err = origUnwrapSession(identity, connState)
-		} else {
-			state, err = conf.DecryptTicket(identity, connState)
-		}
-		if err != nil || state == nil {
-			return nil, err
-		}
-
-		extra := FindSessionStateExtraData(state.Extra)
-		if extra != nil {
-			state.EarlyData = handleSessionTicket(extra, state.EarlyData && unwrapCount == 1)
-		} else {
-			state.EarlyData = false
-		}
-
-		return state, nil
-	}
 }
 
-func SetupConfigForClient(qconf *QUICConfig, getData func() []byte, setData func([]byte) bool) {
-	conf := qconf.TLSConfig
-	if conf.ClientSessionCache != nil {
-		origCache := conf.ClientSessionCache
-		conf.ClientSessionCache = &clientSessionCache{
-			wrapped: origCache,
-			getData: getData,
-			setData: setData,
-		}
-	}
+func SetupConfigForClient(qconf *QUICConfig, _ func() []byte, _ func([]byte) bool) {
+	qconf.EnableStoreSessionEvent = true
 }
 
 func ToTLSEncryptionLevel(e protocol.EncryptionLevel) tls.QUICEncryptionLevel {
@@ -138,8 +89,9 @@ func FromTLSEncryptionLevel(e tls.QUICEncryptionLevel) protocol.EncryptionLevel 
 	}
 }
 
-func SendSessionTicket(c *QUICConn, allow0RTT bool) error {
+func SendSessionTicket(c *QUICConn, allow0RTT bool, extra []byte) error {
 	return c.SendSessionTicket(tls.QUICSessionTicketOptions{
 		EarlyData: allow0RTT,
+		Extra:     [][]byte{extra},
 	})
 }
